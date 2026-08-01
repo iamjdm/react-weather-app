@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import SearchBar from './components/SearchBar'
 import WeatherCard from './components/WeatherCard'
+import ForecastList from './components/ForecastList'
 
 const API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY
 
 function App() {
   const [city, setCity] = useState(null)
   const [weather, setWeather] = useState(null)
+  const [forecast, setForecast] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -19,21 +21,31 @@ function App() {
       setLoading(true)
       setError(null)
       setWeather(null)
+      setForecast(null)
 
       try {
-        const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&units=metric&appid=${API_KEY}`
-        const response = await fetch(url)
+        const params = `q=${encodeURIComponent(city)}&units=metric&appid=${API_KEY}`
+        const [weatherResponse, forecastResponse] = await Promise.all([
+          fetch(`https://api.openweathermap.org/data/2.5/weather?${params}`),
+          fetch(`https://api.openweathermap.org/data/2.5/forecast?${params}`),
+        ])
 
-        if (!response.ok) {
-          if (response.status === 404) {
+        if (!weatherResponse.ok) {
+          if (weatherResponse.status === 404) {
             throw new Error(`Couldn't find a city called "${city}".`)
           }
           throw new Error('Something went wrong fetching the weather.')
         }
+        if (!forecastResponse.ok) {
+          throw new Error('Something went wrong fetching the forecast.')
+        }
 
-        const data = await response.json()
+        const weatherData = await weatherResponse.json()
+        const forecastData = await forecastResponse.json()
+
         if (!ignore) {
-          setWeather(data)
+          setWeather(weatherData)
+          setForecast(forecastData)
         }
       } catch (err) {
         if (!ignore) {
@@ -54,7 +66,7 @@ function App() {
   }, [city])
 
   return (
-    <div className="min-h-screen bg-linear-to-b from-slate-900 to-slate-950 text-white flex flex-col items-center pt-16 gap-6 px-4">
+    <div className="min-h-screen bg-linear-to-b from-slate-900 to-slate-950 text-white flex flex-col items-center pt-16 gap-6 px-4 pb-16">
       <div className="text-center">
         <h1 className="text-3xl font-bold">Weather Dashboard</h1>
         <p className="text-slate-500 text-sm mt-1">Live weather via OpenWeatherMap</p>
@@ -77,6 +89,7 @@ function App() {
       )}
 
       {weather && <WeatherCard data={weather} />}
+      {forecast && <ForecastList data={forecast} />}
 
       {!city && !loading && (
         <p className="text-slate-600 text-sm">Search for a city to see its current weather.</p>
