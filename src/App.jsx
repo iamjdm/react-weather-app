@@ -1,19 +1,30 @@
 import { useState, useEffect } from 'react'
 import SearchBar from './components/SearchBar'
+import LocationButton from './components/LocationButton'
 import WeatherCard from './components/WeatherCard'
 import ForecastList from './components/ForecastList'
+import RecentSearches from './components/RecentSearches'
+import { loadRecentSearches, saveRecentSearches, addRecentSearch } from './utils/recentSearches'
 
 const API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY
 
 function App() {
-  const [city, setCity] = useState(null)
+  // Either { type: 'city', city } or { type: 'coords', lat, lon } -- a single
+  // piece of state so the fetch effect below has one clear trigger, instead
+  // of juggling two separately-nullable "city" and "coords" states.
+  const [query, setQuery] = useState(null)
   const [weather, setWeather] = useState(null)
   const [forecast, setForecast] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [recentSearches, setRecentSearches] = useState(loadRecentSearches)
 
   useEffect(() => {
-    if (!city) return
+    saveRecentSearches(recentSearches)
+  }, [recentSearches])
+
+  useEffect(() => {
+    if (!query) return
 
     let ignore = false
 
@@ -24,7 +35,11 @@ function App() {
       setForecast(null)
 
       try {
-        const params = `q=${encodeURIComponent(city)}&units=metric&appid=${API_KEY}`
+        const params =
+          query.type === 'coords'
+            ? `lat=${query.lat}&lon=${query.lon}&units=metric&appid=${API_KEY}`
+            : `q=${encodeURIComponent(query.city)}&units=metric&appid=${API_KEY}`
+
         const [weatherResponse, forecastResponse] = await Promise.all([
           fetch(`https://api.openweathermap.org/data/2.5/weather?${params}`),
           fetch(`https://api.openweathermap.org/data/2.5/forecast?${params}`),
@@ -32,7 +47,11 @@ function App() {
 
         if (!weatherResponse.ok) {
           if (weatherResponse.status === 404) {
-            throw new Error(`Couldn't find a city called "${city}".`)
+            throw new Error(
+              query.type === 'coords'
+                ? "Couldn't find weather for your location."
+                : `Couldn't find a city called "${query.city}".`,
+            )
           }
           throw new Error('Something went wrong fetching the weather.')
         }
@@ -46,6 +65,7 @@ function App() {
         if (!ignore) {
           setWeather(weatherData)
           setForecast(forecastData)
+          setRecentSearches((prev) => addRecentSearch(prev, weatherData.name))
         }
       } catch (err) {
         if (!ignore) {
@@ -63,7 +83,7 @@ function App() {
     return () => {
       ignore = true
     }
-  }, [city])
+  }, [query])
 
   return (
     <div className="min-h-screen bg-linear-to-b from-slate-900 to-slate-950 text-white flex flex-col items-center pt-16 gap-6 px-4 pb-16">
@@ -72,7 +92,15 @@ function App() {
         <p className="text-slate-500 text-sm mt-1">Live weather via OpenWeatherMap</p>
       </div>
 
-      <SearchBar onSearch={setCity} disabled={loading} />
+      <SearchBar onSearch={(city) => setQuery({ type: 'city', city })} disabled={loading} />
+      <LocationButton
+        onLocate={(lat, lon) => setQuery({ type: 'coords', lat, lon })}
+        disabled={loading}
+      />
+      <RecentSearches
+        cities={recentSearches}
+        onSelect={(city) => setQuery({ type: 'city', city })}
+      />
 
       {loading && (
         <div
@@ -91,7 +119,7 @@ function App() {
       {weather && <WeatherCard data={weather} />}
       {forecast && <ForecastList data={forecast} />}
 
-      {!city && !loading && (
+      {!query && !loading && (
         <p className="text-slate-600 text-sm">Search for a city to see its current weather.</p>
       )}
     </div>

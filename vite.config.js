@@ -14,7 +14,9 @@ export default defineConfig({
     globals: true,
     // The default worker_threads pool doesn't work in this sandboxed shell
     // (tests fail with "Vitest failed to find the current suite"); forks
-    // (child_process) work reliably instead.
+    // (child_process) work reliably instead. Running multiple test files in
+    // parallel is also flaky here even under forks, so parallelism is off too.
     pool: 'forks',
+    fileParallelism: false,
   },
 })
